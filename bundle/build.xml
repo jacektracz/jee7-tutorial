@@ -1,0 +1,206 @@
+
+<project name="make-javaeetutorial" default="about" basedir=".">
+    <property file="build.properties"/>
+    <property name="zipfile" value="${release}.zip" />
+
+    <get dest="./pkg-toolkit.zip"
+         src="${pkg.toolkit.url}"
+         usetimestamp="true" />
+    <unzip dest="." src="./pkg-toolkit.zip"/>
+
+    <import file="${ant.file}/../pkg-toolkit/pkg/lib/pkg-ant-tasks.xml"/>
+    
+    <path id="svn.classpath">
+        <fileset dir="${ant.file.make-javaeetutorial}/../svnant/lib">
+            <include name="**/*.jar" />
+        </fileset>
+    </path>
+
+    <typedef resource="org/tigris/subversion/svnant/svnantlib.xml"
+             classpathref="svn.classpath" />
+
+    <target name="init">
+        <tstamp/>
+    </target>
+
+    <target name="prepare" depends="clean" description="Creates a new base directory.">
+        <mkdir dir="${pkg.root}" />
+    </target>
+    
+    <target name="clean" description="Deletes old versions of files that will be replaced.">
+        <delete dir="${release}" />
+        <delete dir="${pkg.root.base}" />
+        <delete file="${zipfile}" />
+        <delete dir="${pkg.test.image.dir}" />
+        <delete dir="${pkg.test.repo.name}" />
+    </target>
+
+    <target name="getexamples" description="Fetches examples, puts them into examples directory, then adds build.properties file to bp-project directory.">
+        <svn username="${svn.user}" password="${svn.pass}">
+            <export srcUrl="${svn.root}/examples" destPath="${pkg.root}/examples"/>
+        </svn>
+    </target>
+
+    <target name="exclude" description="Add example directories to be excluded from bundle.">
+        <delete dir="${pkg.root}/examples/web/some-example-directory-to-exclude" />
+    </target>
+    
+    <target name="fixexamples" depends="getexamples,exclude" description="Fixes CRLFs and sets proper permissions for examples.">
+        <fixcrlf srcDir="${pkg.root}/examples" includes="**/*.txt,**/*.tag,**/*.jsp,**/*.java,**/*.properties,**/*.xml,**/*.xhtml" eol="lf"/>
+        <chmod perm="775" type="dir">
+            <fileset dir="${pkg.root}/examples/" />
+        </chmod>
+        <chmod perm="664" type="file">
+            <fileset dir="${pkg.root}/examples/" />
+        </chmod>
+    </target>
+
+    <target name="getdoc" description="Fetches HTML files and puts into doc directory.">
+        <svn username="${svn.user}" password="${svn.pass}">
+            <export srcUrl="${svn.root}/doc" destPath="${pkg.root}/doc" />
+        </svn>
+    </target>
+    
+    <target name="fixdoc" depends="getdoc" description="Fixes CRLFs and sets proper file permissions for HTML files.">
+        <fixcrlf srcDir="${pkg.root}" includes="**/*.htm" eol="lf"/>
+        <chmod perm="775" type="dir">
+            <fileset dir="${pkg.root}" />
+            <fileset dir="${pkg.root}/doc" />
+            <fileset dir="${pkg.root}/doc/dcommon" />
+            <fileset dir="${pkg.root}/doc/css" />
+            <fileset dir="${pkg.root}/doc/images" />
+            <fileset dir="${pkg.root}/doc/img" />
+            <fileset dir="${pkg.root}/doc/img_text" />
+        </chmod>
+        <chmod perm="664" type="file">
+            <fileset dir="${pkg.root}/doc" />
+            <fileset dir="${pkg.root}/doc/dcommon" />
+            <fileset dir="${pkg.root}/doc/css" />
+            <fileset dir="${pkg.root}/doc/images" />
+            <fileset dir="${pkg.root}/doc/img" />
+            <fileset dir="${pkg.root}/doc/img_text" />
+        </chmod>
+        <replace dir="${pkg.root}/doc/">
+            <include name="**/*.htm" />
+            <replacefilter token="../../dcommon" value="dcommon" />
+            <replacefilter token="../css" value="css" />
+            <replacefilter token="../images" value="images" />
+        </replace>
+    </target>
+    
+    <target name="add-omniture" description="Adds Omniture tracking script info to end of HTML files.">
+    	<exec executable="perl" dir="${pkg.root}/doc">
+    	    <arg value="${omniture.script}" />
+    	</exec>
+    	<delete>
+    	    <fileset dir="${pkg.root}/doc" includes="**/log-*" />
+    	</delete>
+    </target>
+
+    <target name="zipit" depends="prepare,fixdoc,fixexamples" description="Use all target to create ZIP file">
+        <delete file="${zipfile}"/>
+        <zip zipfile="${zipfile}">
+            <zipfileset dir="${pkg.root}" prefix="${pkg.root}"/>
+        </zip>
+    </target>
+
+    <target name="publish" depends="fixdoc,fixexamples" description="Obsolete. Use package target instead.">
+        <delete file="${publish.location}/${zipfile}"/>
+        <copy todir="${publish.location}">
+            <fileset dir=".">
+                <include name="${zipfile}" />
+            </fileset>
+        </copy>
+        <delete dir="${publish.location}/${pkg.root}" />
+        <copy todir="${publish.location}/${pkg.root}">
+            <fileset dir="${release}"/>
+        </copy>
+        <chmod perm="664" type="file">
+            <fileset dir="${publish.location}/${pkg.root}"/>
+            <fileset file="${publish.location}/${zipfile}"/>
+        </chmod>
+        <chmod perm="775" type="dir">
+            <fileset dir="${publish.location}/${pkg.root}"/>
+        </chmod>
+    </target>
+    
+    <target name="create-pkg-prototype" description="Writes package info template file.">
+        <copy overwrite="true" tofile="${pkg.prototype}" file="${pkg.prototype.template}">
+            <filterset>
+                <filter token="pkg.name" value="${pkg.name}" />
+                <filter token="pkg.version.major" value="${pkg.version.major}" />
+                <filter token="pkg.version.minor" value="${pkg.version.minor}" />
+                <filter token="pkg.version.release" value="${pkg.version.release}" />
+                <filter token="pkg.version.build.major" value="${pkg.version.build.major}" />
+                <filter token="pkg.version.build.minor" value="${pkg.version.build.minor}" />
+                <filter token="pkg.dependencies" value="${pkg.dependencies}" />
+                <filter token="pkg.summary" value="${pkg.summary}" />
+                <filter token="pkg.description" value="${pkg.description}" />
+                <filter token="pkg.info.classification" value="${pkg.info.classification}" />
+                <filter token="pkg.dirtree" value="${pkg.dirtree}" />
+                <filter token="pkg.license" value="${pkg.root}/${pkg.license}" />
+                <filter token="pkg.license.type" value="${pkg.license.type}" />
+            </filterset>
+        </copy>
+    </target>
+
+    <target name="copy-pkg-license" description="Copies up-to-date license file to appropriate location">
+        <copy overwrite="true" tofile="${pkg.root}/${pkg.license}" file="${pkg.license}"/>
+    </target>
+
+    <target name="create-pkg" depends="prepare,
+                                       fixdoc,
+                                       fixexamples,
+                                       complete-pkg,
+                                       copy-pkg-license,
+                                       create-pkg-prototype">
+        <makepkgs repourl="${pkg.repourl}"
+                  basedir="${pkg.base.dir}">
+            <fileset dir=".">
+                <include name="${pkg.prototype}" />
+            </fileset>
+        </makepkgs>
+    </target>
+    
+    <target name="create-pkg-test" depends="prepare,
+                                            fixdoc,
+                                            fixexamples,
+                                            complete-pkg,
+                                            copy-pkg-license,
+                                            create-pkg-prototype">
+        <makepkgs repourl="${pkg.test.repourl}"
+                  basedir="${pkg.base.dir}">
+            <fileset dir=".">
+                <include name="${pkg.prototype}" />
+            </fileset>
+        </makepkgs>
+    </target>
+    
+    <target name="install-pkg-test">
+        <makeimage repourl="${pkg.test.repourl}"
+                   imagedir="${pkg.test.image.dir}"
+                   authority="${pkg.test.image.authority}">
+            <packages>
+                <package name="${pkg.name}" />
+            </packages>
+        </makeimage>
+    </target>
+    
+    <target name="package" 
+            depends="create-pkg" 
+            description="Run to publish javaee-tutorial package to internal repository"/>
+
+    <target name="package-test" 
+            depends="create-pkg-test,install-pkg-test" 
+            description="Run to publish javaee-tutorial package to localt test repository"/>
+    
+    <target name="all" depends="zipit" description="Run to create ZIP file."/>
+    
+    <target name="publish-otn" depends="prepare,
+    					fixdoc,
+    					fixexamples,
+    					add-omniture,
+    					zipit" />
+
+</project>
+
